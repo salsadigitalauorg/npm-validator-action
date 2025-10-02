@@ -1,0 +1,86 @@
+name: "NPM Compromised Package Scanner"
+description: "Scan your repository for compromised npm package versions using a curated list (bundled by default)"
+author: "salsadigitalauorg"
+
+branding:
+  icon: "shield"
+  color: "purple"
+
+inputs:
+  list-url:
+    description: "Optional override URL/ref for compromised_packages.json"
+    required: false
+  warn-only:
+    description: "Deprecated in favor of env NPM_VALIDATOR_WARN_ONLY"
+    required: false
+  psa-id:
+    description: "Optional PSA identifier to include in report summary"
+    required: false
+
+outputs:
+  findings:
+    description: "Number of findings detected"
+    value: ${{ steps.scan.outputs.findings }}
+  report-path:
+    description: "Path to JSON report artifact"
+    value: ${{ steps.scan.outputs['report-path'] }}
+  summary-path:
+    description: "Path to generated Markdown summary"
+    value: ${{ steps.scan.outputs['summary-path'] }}
+  inventory-path:
+    description: "Path to generated package inventory text file"
+    value: ${{ steps.scan.outputs['inventory-path'] }}
+
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install runtime deps
+      shell: bash
+      run: |
+        pip install --disable-pip-version-check --no-cache-dir packaging PyYAML requests
+
+    - name: Run npm-validator
+      id: scan
+      shell: bash
+      env:
+        NPM_VALIDATOR_WARN_ONLY: ${{ env.NPM_VALIDATOR_WARN_ONLY }}
+        NPM_VALIDATOR_CREATE_GH_ISSUE: ${{ env.NPM_VALIDATOR_CREATE_GH_ISSUE }}
+      run: |
+        set -euo pipefail
+        # Run local CLI to produce JSON report
+        # Default to bundled list inside the Action; allow override via input
+        list_path="$GITHUB_ACTION_PATH/data/compromised_packages.json"
+        if [ -n "${{ inputs.list-url }}" ]; then
+          list_path='${{ inputs.list-url }}'
+        fi
+        set +e
+        # Ensure PYTHONPATH is defined even under 'set -u'
+        export PYTHONPATH="$GITHUB_ACTION_PATH/src:${PYTHONPATH:-}"
+        report_json="$RUNNER_TEMP/npm-validator-report.json"
+        python "$GITHUB_ACTION_PATH/scripts/scan.py" --root . --list "$list_path" > "$report_json"
+        rc=$?
+        set -e
+        # Extract findings count using Python (jq may not be available)
+        findings=$(python -c "import json;print(json.load(open('$report_json'))['totals']['findings'])")
+        echo "findings=${findings}" >> "$GITHUB_OUTPUT"
+        echo "report-path=${report_json}" >> "$GITHUB_OUTPUT"
+
+        summary_md="$RUNNER_TEMP/npm-validator-summary.md"
+        inventory_txt="$RUNNER_TEMP/npm-validator-inventory.txt"
+        psa_input='${{ inputs.psa-id }}'
+        python "$GITHUB_ACTION_PATH/scripts/generate_inventory.py" \
+          --root "$GITHUB_WORKSPACE" \
+          --report "$report_json" \
+          --list "$list_path" \
+          --summary "$summary_md" \
+          --inventory "$inventory_txt" \
+          ${psa_input:+--psa-id "$psa_input"}
+
+        cat "$summary_md" >> "$GITHUB_STEP_SUMMARY"
+        echo "summary-path=${summary_md}" >> "$GITHUB_OUTPUT"
+        echo "inventory-path=${inventory_txt}" >> "$GITHUB_OUTPUT"
+        exit $rc
