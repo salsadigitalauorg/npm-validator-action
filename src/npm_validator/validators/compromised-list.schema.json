@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://salsa.digital/npm-validator/compromised-list.schema.json",
+  "title": "Compromised Packages Snapshot",
+  "type": "object",
+  "required": ["source", "packages", "totals"],
+  "properties": {
+    "source": {
+      "type": "object",
+      "required": ["retrievedAt", "url", "contentHash", "runId"],
+      "properties": {
+        "retrievedAt": { "type": "string", "format": "date-time" },
+        "url": {
+          "type": "string",
+          "const": "https://raw.githubusercontent.com/safedep/shai-hulud-migration-response/main/data/ioc/malicious-package-versions.jsonl"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{64}$"
+        },
+        "runId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "versions"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9A-Za-z.+-]+$"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["packages", "versions"],
+      "properties": {
+        "packages": { "type": "integer", "minimum": 0 },
+        "versions": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "changeSummary": {
+      "type": "object",
+      "required": ["added", "removed", "status"],
+      "properties": {
+        "added": { "type": "integer", "minimum": 0 },
+        "removed": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["updated", "no-change", "failed"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "alertMetadata": {
+      "type": "object",
+      "required": ["severity", "message", "channelsNotified"],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warn", "critical"]
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 280 },
+        "channelsNotified": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata": {
+      "type": "object",
+      "required": ["runId", "writtenAt"],
+      "properties": {
+        "runId": { "type": "string", "minLength": 1 },
+        "writtenAt": { "type": "string", "format": "date-time" },
+        "automationBranch": { "type": "string", "minLength": 1 },
+        "warnOnly": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
